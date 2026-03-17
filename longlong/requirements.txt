@@ -1,0 +1,29 @@
+# 嘿小宝 — requirements.txt
+# Install with: pip install -r requirements.txt
+
+# Core AI
+anthropic>=0.25.0
+python-dotenv>=1.0.0
+
+# Voice pipeline
+pyaudio>=0.2.13
+deepgram-sdk>=3.0.0
+openwakeword>=0.6.0
+elevenlabs>=1.2.0
+pydub>=0.25.1
+
+# Google APIs (Calendar + Gmail)
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.1.0
+
+# Vision
+mediapipe>=0.10.0
+opencv-python>=4.8.0
+
+# System control
+pyautogui>=0.9.54
+pycaw>=20240210          # Windows volume control
+
+# Audio
+numpy>=1.24.0
