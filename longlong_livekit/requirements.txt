@@ -1,0 +1,15 @@
+# 龙龙 LiveKit Edition
+livekit-agents[deepgram,groq,elevenlabs,silero,noise-cancellation]>=1.0.0
+livekit-plugins-deepgram
+livekit-plugins-groq
+livekit-plugins-elevenlabs
+livekit-plugins-silero
+livekit-plugins-noise-cancellation
+
+# Tools
+anthropic>=0.25.0
+pyautogui>=0.9.54
+pyperclip>=1.8.2
+pycaw>=20240210
+comtypes>=1.3.0
+python-dotenv>=1.0.0

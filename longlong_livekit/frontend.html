@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LongLong AI Agent</title>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #060608;
+    color: #e0e0e0;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
+    gap: 0;
+  }
+
+  /* ── Background glow ── */
+  .bg-glow {
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 60%, #0d2a5a22 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 50% 50%, #1a4faa11 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    height: 100vh;
+    width: 100%;
+    padding: 5vh 40px 4vh;
+  }
+
+  /* ── Header ── */
+  .header { text-align: center; }
+  h1 {
+    font-size: clamp(2.2rem, 5vw, 4.5rem);
+    font-weight: 200;
+    letter-spacing: 0.35em;
+    color: #fff;
+    line-height: 1;
+  }
+  .subtitle {
+    font-size: clamp(0.7rem, 1.2vw, 0.95rem);
+    color: #333;
+    letter-spacing: 0.18em;
+    margin-top: 10px;
+    font-weight: 300;
+  }
+
+  /* ── Orb ── */
+  .orb-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .orb-ring {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .orb-ring::before {
+    content: '';
+    position: absolute;
+    width: calc(100% + 30px);
+    height: calc(100% + 30px);
+    border-radius: 50%;
+    border: 1px solid #1a4faa22;
+    animation: ring-pulse 3s ease-in-out infinite;
+  }
+  .orb-ring::after {
+    content: '';
+    position: absolute;
+    width: calc(100% + 60px);
+    height: calc(100% + 60px);
+    border-radius: 50%;
+    border: 1px solid #1a4faa11;
+    animation: ring-pulse 3s ease-in-out infinite 0.5s;
+  }
+  @keyframes ring-pulse {
+    0%,100% { opacity: 0.5; transform: scale(1); }
+    50%      { opacity: 1;   transform: scale(1.02); }
+  }
+
+  .orb {
+    width: clamp(160px, 20vw, 260px);
+    height: clamp(160px, 20vw, 260px);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #2176e8, #0d3580 50%, #060e2a);
+    box-shadow:
+      0 0 60px #1a4faa33,
+      0 0 120px #1a4faa11,
+      inset 0 1px 1px #4499ff22;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(2.5rem, 5vw, 4rem);
+    user-select: none;
+    transition: transform 0.3s, box-shadow 0.3s;
+    cursor: default;
+  }
+  .orb.listening {
+    animation: orb-pulse 2s ease-in-out infinite;
+  }
+  .orb.speaking {
+    animation: orb-speak 0.5s ease-in-out infinite alternate;
+    box-shadow: 0 0 80px #44aaff66, 0 0 160px #1a6fdd33;
+  }
+  .orb.thinking {
+    animation: orb-think 1.5s ease-in-out infinite;
+  }
+  @keyframes orb-pulse {
+    0%,100% { transform: scale(1);    box-shadow: 0 0 60px #1a4faa33, 0 0 120px #1a4faa11; }
+    50%      { transform: scale(1.04); box-shadow: 0 0 80px #1a6fdd55, 0 0 160px #1a4faa22; }
+  }
+  @keyframes orb-speak {
+    from { transform: scale(1.02); box-shadow: 0 0 70px #44aaff55, 0 0 140px #1a6fdd22; }
+    to   { transform: scale(1.07); box-shadow: 0 0 100px #44aaff88, 0 0 200px #1a6fdd44; }
+  }
+  @keyframes orb-think {
+    0%,100% { opacity: 0.7; }
+    50%     { opacity: 1; }
+  }
+
+  /* ── Bars ── */
+  .bars {
+    display: flex;
+    gap: clamp(4px, 0.6vw, 8px);
+    align-items: flex-end;
+    height: clamp(32px, 4vh, 50px);
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+  .bars.active { opacity: 1; }
+  .bar {
+    width: clamp(4px, 0.5vw, 7px);
+    background: #1a8fff;
+    border-radius: 4px;
+    animation: bar-bounce 0.8s ease-in-out infinite alternate;
+  }
+  .bar:nth-child(1){animation-delay:0s;   height:30%}
+  .bar:nth-child(2){animation-delay:0.1s; height:60%}
+  .bar:nth-child(3){animation-delay:0.2s; height:100%}
+  .bar:nth-child(4){animation-delay:0.15s;height:75%}
+  .bar:nth-child(5){animation-delay:0.05s;height:45%}
+  @keyframes bar-bounce {
+    from { transform: scaleY(0.25); opacity: 0.4; }
+    to   { transform: scaleY(1);    opacity: 1; }
+  }
+
+  /* ── Status ── */
+  #status {
+    font-size: clamp(0.8rem, 1.3vw, 1rem);
+    color: #444;
+    letter-spacing: 0.08em;
+    font-weight: 300;
+    min-height: 1.4em;
+    text-align: center;
+    transition: color 0.3s;
+  }
+  #status.active { color: #7ab8ff; }
+
+  /* ── Mic meter ── */
+  #mic-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #mic-label {
+    font-size: 0.65rem;
+    color: #222;
+    letter-spacing: 0.15em;
+    font-weight: 400;
+  }
+  #mic-level {
+    width: clamp(80px, 10vw, 160px);
+    height: 3px;
+    background: #111;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  #mic-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #1a5fcc, #4aa8ff);
+    border-radius: 2px;
+    transition: width 0.04s;
+  }
+
+  /* ── Bottom section ── */
+  .bottom {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* ── Transcript ── */
+  #transcript {
+    width: 100%;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid #ffffff08;
+    border-radius: 16px;
+    padding: clamp(14px, 2vh, 24px) clamp(16px, 2vw, 28px);
+    font-size: clamp(0.82rem, 1.1vw, 1rem);
+    line-height: 1.7;
+    color: #555;
+    min-height: clamp(70px, 12vh, 130px);
+    max-height: clamp(120px, 20vh, 200px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #1a1a1a transparent;
+  }
+  #transcript::-webkit-scrollbar { width: 4px; }
+  #transcript::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px; }
+
+  .msg-user  { color: #ccc; margin: 3px 0; }
+  .msg-agent { color: #4aa8ff; margin: 3px 0; }
+  .msg-label { font-size: 0.72rem; opacity: 0.4; margin-right: 8px; font-weight: 500; letter-spacing: 0.05em; }
+
+  /* ── Debug ── */
+  #debug {
+    width: 100%;
+    background: transparent;
+    font-size: 0.68rem;
+    color: #1e1e1e;
+    font-family: 'Courier New', monospace;
+    max-height: clamp(40px, 6vh, 70px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+
+<div class="content">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>龙龙 &nbsp;·&nbsp; LONGLONG</h1>
+    <p class="subtitle">OPEN CLAW HACKATHON 2026 &nbsp;·&nbsp; VOICE AI AGENT</p>
+  </div>
+
+  <!-- Orb section -->
+  <div class="orb-section">
+    <div class="orb-ring">
+      <div class="orb listening" id="orb">🎙️</div>
+    </div>
+
+    <div class="bars active" id="bars">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div>
+    </div>
+
+    <div id="status" class="active">Initializing...</div>
+
+    <div id="mic-wrap">
+      <span id="mic-label">MIC</span>
+      <div id="mic-level"><div id="mic-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- Bottom -->
+  <div class="bottom">
+    <div id="transcript">
+      <div style="color:#1e1e1e;font-size:0.8rem;text-align:center">Conversation will appear here...</div>
+    </div>
+    <div id="debug">starting...</div>
+  </div>
+
+</div>
+
+<div id="audio-container" style="display:none"></div>
+
+<script>
+const WS_URL   = 'LIVEKIT_URL_PLACEHOLDER';
+const ROOM     = 'longlong-room';
+const IDENTITY = 'user-' + Math.random().toString(36).slice(2,7);
+
+const orb        = document.getElementById('orb');
+const statusEl   = document.getElementById('status');
+const bars       = document.getElementById('bars');
+const micBar     = document.getElementById('mic-bar');
+const audioC     = document.getElementById('audio-container');
+const debugEl    = document.getElementById('debug');
+const transcript = document.getElementById('transcript');
+
+let room = null, micAnimFrame = null;
+
+function dbg(msg) {
+  const t = new Date().toLocaleTimeString();
+  debugEl.innerHTML += `<span>[${t}] ${msg} &nbsp;</span>`;
+  debugEl.scrollTop = debugEl.scrollHeight;
+}
+
+function setStatus(msg, state) {
+  statusEl.textContent = msg;
+  statusEl.className = ['listening','speaking','thinking'].includes(state) ? 'active' : '';
+  orb.className = 'orb ' + (state || 'idle');
+  const icons = { listening:'🎙️', speaking:'🔊', thinking:'⌛', idle:'◉', connecting:'◌' };
+  orb.textContent = icons[state] || '◉';
+  bars.className = 'bars' + (['listening','speaking'].includes(state) ? ' active' : '');
+}
+
+function addMsg(who, text) {
+  if (!text?.trim()) return;
+  const last = transcript.lastElementChild;
+  if (last && last.textContent.includes(text.trim())) return;
+  const d = document.createElement('div');
+  d.className = who === 'user' ? 'msg-user' : 'msg-agent';
+  const label = document.createElement('span');
+  label.className = 'msg-label';
+  label.textContent = who === 'user' ? 'YOU' : 'LONGLONG';
+  d.appendChild(label);
+  d.appendChild(document.createTextNode(text.trim()));
+  if (transcript.querySelector('[style]')) transcript.innerHTML = '';
+  transcript.appendChild(d);
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+function startMicMeter(track) {
+  try {
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    function tick() {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      micBar.style.width = Math.min(100, avg*3) + '%';
+      micAnimFrame = requestAnimationFrame(tick);
+    }
+    tick();
+  } catch(e) {}
+}
+
+function attachAudio(track) {
+  dbg('audio ✓');
+  const old = audioC.querySelector(`[data-sid="${track.sid}"]`);
+  if (old) old.remove();
+  const el = track.attach();
+  el.setAttribute('data-sid', track.sid||'');
+  el.autoplay = true; el.playsInline = true; el.volume = 1.0;
+  audioC.appendChild(el);
+  el.play().catch(e => dbg('play err: '+e.message));
+}
+
+async function connectRoom() {
+  setStatus('Connecting...', 'connecting');
+  const token = 'TOKEN_PLACEHOLDER';
+  try {
+    room = new LivekitClient.Room({
+      audioCaptureDefaults: { echoCancellation:true, noiseSuppression:true, autoGainControl:true },
+      adaptiveStream: true, dynacast: true,
+    });
+
+    room.on(LivekitClient.RoomEvent.Connected, async () => {
+      dbg('connected ✓ participants: ' + room.remoteParticipants.size);
+      setStatus('Listening — just speak!', 'listening');
+      room.remoteParticipants.forEach(p => {
+        p.audioTrackPublications.forEach(pub => { if (pub.track) attachAudio(pub.track); });
+      });
+      await room.localParticipant.setMicrophoneEnabled(true);
+      const pub = [...room.localParticipant.audioTrackPublications.values()][0];
+      if (pub?.track) startMicMeter(pub.track);
+      dbg('mic ✓');
+    });
+
+    room.on(LivekitClient.RoomEvent.ParticipantConnected, p => dbg('agent joined: ' + p.identity));
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      dbg('track: ' + track.kind + ' from ' + participant.identity);
+      if (track.kind === LivekitClient.Track.Kind.Audio) attachAudio(track);
+    });
+
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, track => track.detach());
+
+    room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, speakers => {
+      const agentSpeaking = speakers.some(s => s.identity !== IDENTITY);
+      const userSpeaking  = speakers.some(s => s.identity === IDENTITY);
+      if (agentSpeaking)     setStatus('LongLong is speaking...', 'speaking');
+      else if (userSpeaking) setStatus('Got you, thinking...', 'thinking');
+      else                   setStatus('Listening — just speak!', 'listening');
+    });
+
+    room.on(LivekitClient.RoomEvent.TranscriptionReceived, (segs, participant) => {
+      segs.forEach(seg => {
+        if (seg.final && seg.text?.trim()) {
+          addMsg(participant?.identity === IDENTITY ? 'user' : 'agent', seg.text);
+        }
+      });
+    });
+
+    room.on(LivekitClient.RoomEvent.Disconnected, () => {
+      setStatus('Disconnected.', 'idle');
+      if (micAnimFrame) cancelAnimationFrame(micAnimFrame);
+    });
+
+    await room.connect(WS_URL, token);
+  } catch(e) {
+    setStatus('Failed: ' + e.message, 'idle');
+    dbg('ERROR: ' + e.message);
+  }
+}
+
+// Called by desktop app — no permission popup
+async function autoConnect() {
+  await connectRoom();
+}
+
+// Called in browser mode
+async function grantAndConnect() {
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    s.getTracks().forEach(t => t.stop());
+    await connectRoom();
+  } catch(e) {
+    setStatus('Microphone denied', 'idle');
+  }
+}
+</script>
+</body>
+</html>
