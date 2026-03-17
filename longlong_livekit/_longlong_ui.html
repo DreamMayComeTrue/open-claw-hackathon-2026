@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LongLong AI Agent</title>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a; color: #e0e0e0;
+    font-family: 'Segoe UI', sans-serif;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 100vh; gap: 20px;
+  }
+  h1 { font-size: 2.4rem; font-weight: 300; letter-spacing: 0.2em; color: #fff; }
+  .subtitle { font-size: 0.9rem; color: #555; letter-spacing: 0.1em; }
+
+  /* Permission overlay — only shown in browser mode */
+  #permission-overlay {
+    position: fixed; inset: 0; background: #0a0a0a;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 20px; z-index: 100;
+  }
+  #permission-overlay h2 { font-size: 1.4rem; font-weight: 300; color: #fff; }
+  #permission-overlay p  { font-size: 0.9rem; color: #555; text-align: center; max-width: 300px; }
+  #allow-btn {
+    background: #1a6fdd; color: #fff; border: none;
+    padding: 14px 40px; border-radius: 30px;
+    font-size: 1rem; cursor: pointer;
+    transition: background 0.2s;
+  }
+  #allow-btn:hover { background: #2280f0; }
+
+  .orb {
+    width: 160px; height: 160px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #1a6fdd, #0a2a6e);
+    box-shadow: 0 0 40px #1a4faa44;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3rem; user-select: none; transition: transform 0.2s;
+  }
+  .orb.idle      { opacity: 0.7; }
+  .orb.listening { animation: pulse 1.4s ease-in-out infinite; }
+  .orb.speaking  { animation: speak 0.6s ease-in-out infinite alternate; box-shadow: 0 0 80px #44aaff99; }
+  .orb.thinking  { animation: think 1s ease-in-out infinite alternate; }
+  @keyframes pulse  { 0%,100%{transform:scale(1);box-shadow:0 0 40px #1a6fdd66} 50%{transform:scale(1.06);box-shadow:0 0 70px #1a8fff88} }
+  @keyframes speak  { from{transform:scale(1.02)} to{transform:scale(1.08)} }
+  @keyframes think  { from{opacity:0.6} to{opacity:1} }
+
+  .bars { display:flex; gap:4px; align-items:flex-end; height:40px; opacity:0; transition:opacity 0.3s; }
+  .bars.active { opacity:1; }
+  .bar { width:5px; background:#1a8fff; border-radius:3px; animation:bar-bounce 0.8s ease-in-out infinite alternate; }
+  .bar:nth-child(1){animation-delay:0s;height:12px}
+  .bar:nth-child(2){animation-delay:0.1s;height:24px}
+  .bar:nth-child(3){animation-delay:0.2s;height:36px}
+  .bar:nth-child(4){animation-delay:0.15s;height:28px}
+  .bar:nth-child(5){animation-delay:0.05s;height:16px}
+  @keyframes bar-bounce { from{transform:scaleY(0.3);opacity:0.5} to{transform:scaleY(1);opacity:1} }
+
+  #status { font-size:0.85rem; color:#666; letter-spacing:0.05em; min-height:1.2em; text-align:center; }
+
+  #mic-wrap { display:flex; align-items:center; gap:8px; }
+  #mic-label { font-size:0.72rem; color:#2a2a2a; letter-spacing:0.08em; }
+  #mic-level { width:120px; height:4px; background:#111; border-radius:2px; overflow:hidden; }
+  #mic-bar   { height:100%; width:0%; background:#1a8fff; border-radius:2px; transition:width 0.05s; }
+
+  #transcript {
+    max-width:480px; width:90%;
+    background:#111; border:1px solid #1a1a1a;
+    border-radius:12px; padding:16px;
+    font-size:0.9rem; line-height:1.6; color:#aaa;
+    min-height:80px; max-height:220px; overflow-y:auto;
+  }
+  .msg-user  { color:#fff; margin:4px 0; }
+  .msg-agent { color:#4aa8ff; margin:4px 0; }
+  .msg-label { font-size:0.75rem; opacity:0.5; margin-right:6px; }
+
+  #debug {
+    max-width:480px; width:90%;
+    background:#0d0d0d; border:1px solid #151515;
+    border-radius:8px; padding:8px 12px;
+    font-size:0.7rem; color:#2a2a2a; font-family:monospace;
+    max-height:80px; overflow-y:auto;
+  }
+</style>
+</head>
+<body>
+
+<div id="permission-overlay">
+  <h2>🐉 LongLong is ready</h2>
+  <p>Click below to allow microphone access and start talking</p>
+  <button id="allow-btn" onclick="grantAndConnect()">Allow Microphone & Connect</button>
+</div>
+
+<h1>龙龙 · LONGLONG</h1>
+<p class="subtitle">Open Claw Hackathon 2026 · Voice AI Agent</p>
+
+<div class="orb idle" id="orb">🎙️</div>
+
+<div class="bars" id="bars">
+  <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+  <div class="bar"></div><div class="bar"></div>
+</div>
+
+<div id="status">Initializing...</div>
+
+<div id="mic-wrap">
+  <span id="mic-label">MIC</span>
+  <div id="mic-level"><div id="mic-bar"></div></div>
+</div>
+
+<div id="transcript">
+  <div style="color:#222;font-size:0.8rem">Conversation will appear here...</div>
+</div>
+
+<div id="debug">starting...</div>
+<div id="audio-container"></div>
+
+<script>
+const WS_URL   = 'wss://open-claw-hackathon-2026-j46xq3ha.livekit.cloud';
+const ROOM     = 'longlong-room';
+const IDENTITY = 'user-' + Math.random().toString(36).slice(2,7);
+
+const orb      = document.getElementById('orb');
+const statusEl = document.getElementById('status');
+const bars     = document.getElementById('bars');
+const micBar   = document.getElementById('mic-bar');
+const audioC   = document.getElementById('audio-container');
+const debugEl  = document.getElementById('debug');
+const overlay  = document.getElementById('permission-overlay');
+const transcript = document.getElementById('transcript');
+
+let room = null, micAnimFrame = null;
+
+function dbg(msg) {
+  const t = new Date().toLocaleTimeString();
+  debugEl.innerHTML += `<div>[${t}] ${msg}</div>`;
+  debugEl.scrollTop = debugEl.scrollHeight;
+  console.log('[龙龙]', msg);
+}
+
+function setStatus(msg, state) {
+  statusEl.textContent = msg;
+  orb.className = 'orb ' + (state || 'idle');
+  const icons = { listening:'🎙️', speaking:'🔊', thinking:'⌛', idle:'◉', connecting:'⟳' };
+  orb.textContent = icons[state] || '◉';
+  bars.className = 'bars' + (['listening','speaking'].includes(state) ? ' active' : '');
+}
+
+function addMsg(who, text) {
+  if (!text?.trim()) return;
+  const d = document.createElement('div');
+  d.className = who === 'user' ? 'msg-user' : 'msg-agent';
+  const label = document.createElement('span');
+  label.className = 'msg-label';
+  label.textContent = who === 'user' ? 'You:' : 'LongLong:';
+  d.appendChild(label);
+  d.appendChild(document.createTextNode(text));
+  if (transcript.querySelector('[style]')) transcript.innerHTML = '';
+  transcript.appendChild(d);
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+function startMicMeter(track) {
+  try {
+    const stream = new MediaStream([track.mediaStreamTrack]);
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    function tick() {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      micBar.style.width = Math.min(100, avg*3) + '%';
+      micAnimFrame = requestAnimationFrame(tick);
+    }
+    tick();
+  } catch(e) { dbg('Mic meter: ' + e); }
+}
+
+function attachAudio(track) {
+  dbg('🔊 Attaching audio: ' + (track.sid||''));
+  const old = audioC.querySelector(`[data-sid="${track.sid}"]`);
+  if (old) old.remove();
+  const el = track.attach();
+  el.setAttribute('data-sid', track.sid||'');
+  el.autoplay = true; el.playsInline = true;
+  el.volume = 1.0; el.style.display = 'none';
+  audioC.appendChild(el);
+  el.play().then(()=>dbg('Audio ✅')).catch(e=>dbg('Audio err: '+e.message));
+}
+
+async function connectRoom() {
+  setStatus('Connecting...', 'connecting');
+  const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiRGVtbyBVc2VyIiwidmlkZW8iOnsicm9vbUpvaW4iOnRydWUsInJvb20iOiJsb25nbG9uZy1yb29tIiwiY2FuUHVibGlzaCI6dHJ1ZSwiY2FuU3Vic2NyaWJlIjp0cnVlLCJjYW5QdWJsaXNoRGF0YSI6dHJ1ZX0sInN1YiI6InVzZXItZGVtbyIsImlzcyI6IkFQSWhOWlA5dHFIUWdvQiIsIm5iZiI6MTc3Mzc0MzQ0NywiZXhwIjoxNzczNzY1MDQ3fQ.B7kxyqH0h30WRI3gVQYMbMVn8g7h4UnM6e2NE1OadTY';
+  dbg('Token: ' + token.slice(0,25) + '...');
+
+  try {
+    room = new LivekitClient.Room({
+      audioCaptureDefaults: { echoCancellation:true, noiseSuppression:true, autoGainControl:true },
+      adaptiveStream: true, dynacast: true,
+    });
+
+    room.on(LivekitClient.RoomEvent.Connected, async () => {
+      dbg(`✅ Connected — participants: ${room.remoteParticipants.size}`);
+      setStatus('Listening — just speak!', 'listening');
+
+      // Attach existing tracks
+      room.remoteParticipants.forEach(p => {
+        p.audioTrackPublications.forEach(pub => {
+          if (pub.track) attachAudio(pub.track);
+        });
+      });
+
+      // Enable mic
+      await room.localParticipant.setMicrophoneEnabled(true);
+      const pub = [...room.localParticipant.audioTrackPublications.values()][0];
+      if (pub?.track) startMicMeter(pub.track);
+      dbg('Mic enabled ✅');
+    });
+
+    room.on(LivekitClient.RoomEvent.ParticipantConnected, p => {
+      dbg('Agent joined: ' + p.identity);
+    });
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      dbg(`Track: ${track.kind} from ${participant.identity}`);
+      if (track.kind === LivekitClient.Track.Kind.Audio) attachAudio(track);
+    });
+
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, track => track.detach());
+
+    room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, speakers => {
+      const agentSpeaking = speakers.some(s => s.identity !== IDENTITY);
+      const userSpeaking  = speakers.some(s => s.identity === IDENTITY);
+      if (agentSpeaking)     setStatus('LongLong is speaking...', 'speaking');
+      else if (userSpeaking) setStatus('Processing...', 'thinking');
+      else                   setStatus('Listening — just speak!', 'listening');
+    });
+
+    room.on(LivekitClient.RoomEvent.TranscriptionReceived, (segs, participant) => {
+      segs.forEach(seg => {
+        if (seg.final) addMsg(participant?.identity === IDENTITY ? 'user' : 'agent', seg.text);
+      });
+    });
+
+    room.on(LivekitClient.RoomEvent.Disconnected, reason => {
+      dbg('Disconnected: ' + reason);
+      setStatus('Disconnected.', 'idle');
+      if (micAnimFrame) cancelAnimationFrame(micAnimFrame);
+    });
+
+    await room.connect(WS_URL, token);
+
+  } catch(e) {
+    setStatus('Failed: ' + e.message, 'idle');
+    dbg('ERROR: ' + e.message);
+  }
+}
+
+// For browser mode — requires user click
+async function grantAndConnect() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+    overlay.style.display = 'none';
+    await connectRoom();
+  } catch(e) {
+    dbg('Mic denied: ' + e.message);
+    setStatus('Microphone access denied!', 'idle');
+  }
+}
+
+// For desktop app mode — auto-connect without permission popup
+async function autoConnect() {
+  overlay.style.display = 'none';
+  await connectRoom();
+}
+</script>
+<script>
+        // Auto-connect immediately in desktop app — no permission popup needed
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                connectRoom();
+            }, 500);
+        });
+        </script></body>
+</html>
