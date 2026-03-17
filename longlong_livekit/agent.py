@@ -1,7 +1,7 @@
 """
 龙龙 — LiveKit Voice Agent
 Phone-call quality conversation: full-duplex, interruptible, ~300ms response
-Stack: Deepgram STT → Groq LLM → Edge TTS (via custom plugin)
+Stack: Deepgram STT → Anthropic Claude LLM → Deepgram TTS · WebRTC via LiveKit
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from livekit.agents import (
     function_tool,
     RunContext,
 )
-from livekit.plugins import deepgram, silero, cartesia, anthropic as lk_anthropic
+from livekit.plugins import deepgram, silero, anthropic as lk_anthropic
 from livekit.plugins import noise_cancellation
 
 load_dotenv()
@@ -52,7 +52,7 @@ CAPABILITIES:
 @function_tool
 async def get_weather(context: RunContext, city: str) -> str:
     """Get current weather for a city."""
-    import urllib.request, json
+    import urllib.request, urllib.parse, json
     try:
         url = f"https://wttr.in/{urllib.parse.quote(city)}?format=j1"
         with urllib.request.urlopen(url, timeout=5) as r:

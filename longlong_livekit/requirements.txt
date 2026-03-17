@@ -1,8 +1,7 @@
 # 龙龙 LiveKit Edition
-livekit-agents[deepgram,groq,elevenlabs,silero,noise-cancellation]>=1.0.0
+livekit-agents[deepgram,silero,noise-cancellation]>=1.0.0
 livekit-plugins-deepgram
-livekit-plugins-groq
-livekit-plugins-elevenlabs
+livekit-plugins-anthropic
 livekit-plugins-silero
 livekit-plugins-noise-cancellation
 
