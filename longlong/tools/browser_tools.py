@@ -1,15 +1,14 @@
 """
-Browser Tools — open/close websites, web search
-Uses webbrowser (built-in) + pygetwindow for window control on Windows
+Browser Tools — Windows-specific, actually works
 """
 
 import webbrowser
 import subprocess
 import urllib.parse
+import time
 
 
 def open_website(url: str) -> str:
-    """Open a URL in the default browser."""
     if not url.startswith("http"):
         url = "https://" + url
     webbrowser.open(url)
@@ -17,29 +16,36 @@ def open_website(url: str) -> str:
 
 
 def search_web(query: str) -> str:
-    """Search Google for a query."""
     encoded = urllib.parse.quote(query)
-    url = f"https://www.google.com/search?q={encoded}"
-    webbrowser.open(url)
+    webbrowser.open(f"https://www.google.com/search?q={encoded}")
     return f"Searched for: {query}"
 
 
 def open_youtube_search(query: str) -> str:
-    """Search YouTube for a query."""
     encoded = urllib.parse.quote(query)
-    url = f"https://www.youtube.com/results?search_query={encoded}"
-    webbrowser.open(url)
+    webbrowser.open(f"https://www.youtube.com/results?search_query={encoded}")
     return f"Opened YouTube search for: {query}"
 
 
 def close_browser() -> str:
-    """Close Chrome or Edge on Windows."""
-    try:
-        subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True)
-        subprocess.run(["taskkill", "/F", "/IM", "msedge.exe"], capture_output=True)
-        return "Browser closed."
-    except Exception as e:
-        return f"Could not close browser: {e}"
+    """Force close all browsers on Windows."""
+    closed = []
+    browsers = {
+        "chrome.exe": "Chrome",
+        "msedge.exe": "Edge",
+        "firefox.exe": "Firefox",
+        "brave.exe": "Brave",
+    }
+    for exe, name in browsers.items():
+        result = subprocess.run(
+            ["taskkill", "/F", "/IM", exe],
+            capture_output=True, text=True
+        )
+        if "SUCCESS" in result.stdout or "成功" in result.stdout:
+            closed.append(name)
+    if closed:
+        return f"Closed: {', '.join(closed)}"
+    return "No browsers were open"
 
 
 DEFINITIONS = [
@@ -49,7 +55,7 @@ DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "url": {"type": "string", "description": "URL to open, e.g. youtube.com or https://github.com"},
+                "url": {"type": "string", "description": "URL to open"},
             },
             "required": ["url"],
         },
@@ -78,7 +84,7 @@ DEFINITIONS = [
     },
     {
         "name": "close_browser",
-        "description": "Close the browser window.",
+        "description": "Force close all open browsers (Chrome, Edge, Firefox, Brave).",
         "input_schema": {"type": "object", "properties": {}},
     },
 ]

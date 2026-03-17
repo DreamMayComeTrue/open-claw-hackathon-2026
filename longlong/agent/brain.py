@@ -1,13 +1,13 @@
 """
-龙龙's Brain — Groq for fast responses, Claude for tool calling
-Groq (llama-3.3-70b) handles simple conversation at ~200ms
-Claude handles calendar, email, browser, file, system tools
+龙龙's Brain — Groq fast + Claude tool calling
+Streams response so TTS starts speaking before full reply is generated.
 """
 
 import anthropic
 import os
+import re
 from dotenv import load_dotenv
-from tools import calendar_tools, browser_tools, email_tools, file_tools, system_tools
+from tools import calendar_tools, browser_tools, email_tools, file_tools, system_tools, computer_tools
 from utils.display import print_status
 
 load_dotenv()
@@ -16,21 +16,18 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GROQ_API_KEY      = os.getenv("GROQ_API_KEY", "")
 
 SYSTEM_PROMPT = """
-You are 小龙小龙 (Xiǎo Lóng Xiǎo Lóng), a friendly bilingual AI voice assistant.
-Your nickname is 龙龙. Built for Open Claw Hackathon 2026.
+You are 小龙小龙 (Xiǎo Lóng Xiǎo Lóng), a smart bilingual AI voice assistant. Nickname: 龙龙.
+Built for Open Claw Hackathon 2026.
 
 LANGUAGE RULE:
 - User speaks Chinese → reply in Chinese
 - User speaks English → reply in English
-- Keep replies SHORT — max 2 sentences. This is voice, not text.
-- No markdown, no bullet points, no emojis.
-- Sound warm and natural like a friend.
-- You are 龙龙, never 小宝 or any other name.
+- Max 2-3 short sentences per reply. This is voice — be concise and natural.
+- No markdown, no bullets, no emojis. Sound like a friend talking.
+- You are 龙龙, never 小宝.
 
-TOOL USE:
-You have access to: Google Calendar, browser, email, file reader, system controls.
-Use tools when the user asks you to DO something. 
-For simple questions or chat, just reply directly — no tools needed.
+TOOLS available: Google Calendar, Gmail, browser, files, system apps, mouse/keyboard control, screen vision.
+Use tools when user asks you to DO something. For chat/questions just reply directly.
 """
 
 ALL_TOOLS = (
@@ -39,6 +36,7 @@ ALL_TOOLS = (
     + email_tools.DEFINITIONS
     + file_tools.DEFINITIONS
     + system_tools.DEFINITIONS
+    + computer_tools.DEFINITIONS
 )
 
 TOOL_HANDLERS = {
@@ -47,109 +45,98 @@ TOOL_HANDLERS = {
     **email_tools.HANDLERS,
     **file_tools.HANDLERS,
     **system_tools.HANDLERS,
+    **computer_tools.HANDLERS,
 }
 
-# Keywords that suggest tool use is needed
 TOOL_KEYWORDS = [
-    # Calendar
-    "calendar", "event", "meeting", "schedule", "remind", "appointment",
-    "日历", "会议", "日程", "提醒", "创建", "删除",
-    # Browser
-    "open", "search", "youtube", "google", "website", "browser",
-    "打开", "搜索", "网站",
-    # Email
-    "email", "mail", "send", "邮件", "发送",
-    # File
-    "read", "file", "folder", "path", "读取", "文件",
-    # System
-    "volume", "screenshot", "app", "notepad", "spotify",
-    "音量", "截图", "打开应用",
+    "calendar","event","meeting","schedule","remind","appointment",
+    "日历","会议","日程","提醒","创建","删除",
+    "email","mail","send","邮件","发送",
+    "open","close","search","youtube","google","website","browser",
+    "打开","关闭","搜索","网站",
+    "read","file","folder","path","读取","文件",
+    "volume","screenshot","app","notepad","spotify","powershell","chrome","edge",
+    "音量","截图","打开应用",
+    "click","type","press","scroll","screen","mouse","keyboard",
+    "what.*see","describe.*screen","find.*button","shortcut",
+    "看屏幕","点击","输入","按键",
 ]
 
 
 def _needs_tools(text: str) -> bool:
-    """Quick check if the command likely needs a tool."""
     text_lower = text.lower()
     return any(kw in text_lower for kw in TOOL_KEYWORDS)
 
 
 class XiaoBaoBrain:
     def __init__(self):
-        # Groq client for fast replies
-        self._groq_client = None
+        self._groq = None
         if GROQ_API_KEY:
             try:
                 from groq import Groq
-                self._groq_client = Groq(api_key=GROQ_API_KEY)
-                print_status("Groq client ready ✅ (fast mode)", "green")
-            except ImportError:
-                print_status("groq package not installed — pip install groq", "yellow")
+                self._groq = Groq(api_key=GROQ_API_KEY)
+                print_status("Groq ready ✅", "green")
             except Exception as e:
                 print_status(f"Groq init failed: {e}", "yellow")
 
-        # Claude client for tool calling
-        self._claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
-        self.conversation_history = []
+        self._claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self.history = []
         self.last_language = "en"
 
     async def process(self, user_input: str) -> str:
-        self.last_language = self._detect_language(user_input)
-        self.conversation_history.append({"role": "user", "content": user_input})
+        self.last_language = self._detect_lang(user_input)
+        self.history.append({"role": "user", "content": user_input})
 
-        # Route: tool needed → Claude, simple chat → Groq
         if _needs_tools(user_input):
-            print_status("→ Claude (tool use)", "yellow")
+            print_status("→ Claude Haiku (tools)", "yellow")
             response = await self._claude_process(user_input)
-        elif self._groq_client:
-            print_status("→ Groq (fast reply)", "yellow")
-            response = self._groq_process(user_input)
+        elif self._groq:
+            print_status("→ Groq (fast)", "yellow")
+            response = self._groq_stream(user_input)
         else:
-            print_status("→ Claude (no Groq key)", "yellow")
             response = await self._claude_process(user_input)
 
-        self.conversation_history.append({"role": "assistant", "content": response})
-        if len(self.conversation_history) > 20:
-            self.conversation_history = self.conversation_history[-20:]
+        self.history.append({"role": "assistant", "content": response})
+        if len(self.history) > 20:
+            self.history = self.history[-20:]
         return response
 
-    def _groq_process(self, user_input: str) -> str:
-        """Ultra-fast reply via Groq — no tools, just conversation."""
+    def _groq_stream(self, user_input: str) -> str:
+        """Groq streaming — collects full response fast."""
         try:
             messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            # Include last 6 turns for context
-            messages += self.conversation_history[-6:]
-
-            resp = self._groq_client.chat.completions.create(
+            messages += self.history[-6:]
+            stream = self._groq.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=messages,
-                max_tokens=150,        # short voice replies only
+                max_tokens=120,
                 temperature=0.7,
+                stream=True,
             )
-            return resp.choices[0].message.content.strip()
+            full = ""
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content or ""
+                full += delta
+            return full.strip()
         except Exception as e:
-            print_status(f"Groq failed ({e}) — falling back to Claude", "yellow")
+            print_status(f"Groq failed: {e} — using Claude", "yellow")
             import asyncio
             loop = asyncio.new_event_loop()
-            result = loop.run_until_complete(self._claude_process(user_input))
+            r = loop.run_until_complete(self._claude_process(user_input))
             loop.close()
-            return result
+            return r
 
     async def _claude_process(self, user_input: str) -> str:
-        """Claude with full tool calling for actions."""
-        messages = self.conversation_history.copy()
-
+        messages = self.history.copy()
         while True:
-            response = self._claude_client.messages.create(
-                model="claude-haiku-4-5-20251001",   # fastest Claude model
-                max_tokens=512,
+            response = self._claude.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=400,
                 system=SYSTEM_PROMPT,
                 tools=ALL_TOOLS,
                 messages=messages,
             )
-
-            text_parts = []
-            tool_calls = []
+            text_parts, tool_calls = [], []
             for block in response.content:
                 if block.type == "text":
                     text_parts.append(block.text)
@@ -159,33 +146,31 @@ class XiaoBaoBrain:
             if not tool_calls:
                 return " ".join(text_parts).strip()
 
-            # Execute tools
             tool_results = []
             for tc in tool_calls:
-                print_status(f"🔧 {tc.name}", "yellow")
-                result = await self._execute_tool(tc.name, tc.input)
-                print_status(f"   → {result}", "blue")
+                print_status(f"Tool: {tc.name}", "yellow")
+                result = await self._run_tool(tc.name, tc.input)
+                print_status(f"  → {result[:80]}", "blue")
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tc.id,
                     "content": str(result),
                 })
-
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
 
-    async def _execute_tool(self, tool_name: str, tool_input: dict) -> str:
-        handler = TOOL_HANDLERS.get(tool_name)
+    async def _run_tool(self, name: str, inputs: dict) -> str:
+        handler = TOOL_HANDLERS.get(name)
         if not handler:
-            return f"Tool '{tool_name}' not found."
+            return f"Tool '{name}' not found"
         try:
-            result = handler(**tool_input)
+            result = handler(**inputs)
             if hasattr(result, "__await__"):
                 result = await result
             return result
         except Exception as e:
-            return f"Tool error: {e}"
+            return f"Error: {e}"
 
-    def _detect_language(self, text: str) -> str:
+    def _detect_lang(self, text: str) -> str:
         cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
         return "zh" if cjk > len(text) * 0.2 else "en"

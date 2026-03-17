@@ -1,92 +1,89 @@
 """
-TTS — Edge TTS with pygame playback (fast, clean audio)
-Auto-detects Chinese vs English and picks the right neural voice.
+TTS — Streaming Edge TTS
+Splits response into sentences and speaks each one immediately.
+龙龙 starts talking before finishing the full response — like a real conversation.
 """
 
 import io
 import asyncio
-import tempfile
-import os
+import re
 import threading
+import pygame
 from utils.display import print_status
 
 VOICE_ZH = "zh-CN-XiaoxiaoNeural"
 VOICE_EN = "en-US-AriaNeural"
 
+# Split on sentence endings — speaks each chunk as soon as it's ready
+SENTENCE_SPLIT = re.compile(r'(?<=[。！？.!?])\s*')
+
 
 class ElevenLabsTTS:
     def __init__(self):
         self._lock = threading.Lock()
-        # Pre-init pygame mixer once at startup for speed
         try:
-            import pygame
-            pygame.mixer.init(frequency=24000, size=-16, channels=1, buffer=512)
-            self._pygame_ready = True
+            pygame.mixer.init(frequency=24000, size=-16, channels=1, buffer=256)
             print_status("pygame mixer ready ✅", "green")
         except Exception as e:
             print_status(f"pygame init failed: {e}", "yellow")
-            self._pygame_ready = False
+
+    def _detect_voice(self, text: str) -> str:
+        cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
+        return VOICE_ZH if cjk > len(text) * 0.2 else VOICE_EN
 
     def speak_sync(self, text: str):
+        """
+        Stream TTS sentence by sentence.
+        First sentence plays in ~300ms — feels like instant response.
+        """
         with self._lock:
-            cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
-            voice = VOICE_ZH if cjk > len(text) * 0.2 else VOICE_EN
+            sentences = [s.strip() for s in SENTENCE_SPLIT.split(text) if s.strip()]
+            if not sentences:
+                return
+
+            voice = self._detect_voice(text)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(self._edge_speak(text, voice))
+                loop.run_until_complete(self._stream_sentences(sentences, voice))
             finally:
                 loop.close()
+
+    async def _stream_sentences(self, sentences: list, voice: str):
+        """Fetch and play each sentence in order — overlaps fetch+play."""
+        import edge_tts
+
+        for i, sentence in enumerate(sentences):
+            if not sentence:
+                continue
+            try:
+                communicate = edge_tts.Communicate(sentence, voice, rate="+15%")
+                audio_buf = b""
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_buf += chunk["data"]
+
+                if audio_buf:
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, self._play_mp3, audio_buf
+                    )
+            except Exception as e:
+                print_status(f"TTS chunk failed: {e}", "yellow")
+                if i == 0:
+                    self._pyttsx3_play(sentence)
+
+    def _play_mp3(self, mp3_bytes: bytes):
+        try:
+            sound = pygame.mixer.Sound(io.BytesIO(mp3_bytes))
+            channel = sound.play()
+            while channel and channel.get_busy():
+                pygame.time.wait(10)
+        except Exception as e:
+            print_status(f"pygame play failed: {e}", "yellow")
 
     async def speak(self, text: str):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self.speak_sync, text)
-
-    async def _edge_speak(self, text: str, voice: str):
-        try:
-            import edge_tts
-
-            print_status(f"TTS → {voice}", "blue")
-
-            # Stream directly into buffer — no disk write needed
-            communicate = edge_tts.Communicate(text, voice, rate="+10%")
-            audio_buffer = b""
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_buffer += chunk["data"]
-
-            if not audio_buffer:
-                raise Exception("Empty audio")
-
-            self._play_mp3_bytes(audio_buffer)
-            print_status("TTS ✅", "green")
-
-        except Exception as e:
-            print_status(f"Edge TTS failed ({e}) — using pyttsx3", "yellow")
-            self._pyttsx3_play(text)
-
-    def _play_mp3_bytes(self, mp3_bytes: bytes):
-        """Play MP3 bytes via pygame — fastest path, no temp file."""
-        try:
-            import pygame
-            sound = pygame.mixer.Sound(io.BytesIO(mp3_bytes))
-            channel = sound.play()
-            while channel.get_busy():
-                pygame.time.wait(10)
-        except Exception as e:
-            print_status(f"pygame Sound failed ({e}) — trying file method", "yellow")
-            # Fallback: save to temp file
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                f.write(mp3_bytes)
-                tmp = f.name
-            try:
-                import pygame
-                pygame.mixer.music.load(tmp)
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy():
-                    pygame.time.Clock().tick(10)
-            finally:
-                os.unlink(tmp)
 
     def _pyttsx3_play(self, text: str):
         try:
@@ -105,9 +102,7 @@ class ElevenLabsTTS:
             print_status(f"pyttsx3 failed: {e}", "red")
 
     def play_activation_sound(self):
-        """Quick beep using pygame."""
         try:
-            import pygame
             import numpy as np, math
             rate = 22050
             t = np.linspace(0, 0.12, int(rate * 0.12), False)
@@ -115,13 +110,12 @@ class ElevenLabsTTS:
             stereo = np.column_stack([wave, wave])
             sound = pygame.sndarray.make_sound(stereo)
             sound.play()
-            pygame.time.wait(150)
+            pygame.time.wait(130)
         except Exception:
             pass
 
     def __del__(self):
         try:
-            import pygame
             pygame.mixer.quit()
         except Exception:
             pass
