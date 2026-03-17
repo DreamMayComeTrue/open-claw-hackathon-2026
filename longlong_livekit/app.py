@@ -4,7 +4,7 @@ Run: python app.py
 No browser popups, mic pre-granted, looks like a real app.
 """
 
-import os, sys, subprocess, time, threading
+import os, sys, subprocess, time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -39,9 +39,14 @@ def generate_token():
 # ── Dispatch agent to room ────────────────────────────────────────────────────
 def dispatch_agent(URL, KEY, SECRET):
     try:
-        from livekit.api import LiveKitAPI, CreateAgentDispatchRequest, \
-            DeleteAgentDispatchRequest, ListAgentDispatchRequest
+        from livekit.api import (
+            LiveKitAPI,
+            CreateAgentDispatchRequest,
+            DeleteAgentDispatchRequest,
+            ListAgentDispatchRequest,
+        )
         import asyncio
+
         async def _dispatch():
             async with LiveKitAPI(URL, KEY, SECRET) as api:
                 # Clear old dispatches first to avoid duplicate agents
@@ -56,9 +61,10 @@ def dispatch_agent(URL, KEY, SECRET):
                                 room="longlong-room"
                             )
                         )
-                        print(f"🗑️  Removed old dispatch")
+                        print("🗑️  Removed old dispatch")
                 except Exception:
                     pass
+
                 # Fresh dispatch
                 await api.agent_dispatch.create_dispatch(
                     CreateAgentDispatchRequest(
@@ -66,6 +72,7 @@ def dispatch_agent(URL, KEY, SECRET):
                         room="longlong-room",
                     )
                 )
+
         asyncio.run(_dispatch())
         print("✅ Agent dispatched")
     except Exception as e:
@@ -105,20 +112,26 @@ def run_desktop_app(html_content):
         from PyQt5.QtWidgets import QApplication, QMainWindow
         from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings, QWebEnginePage
         from PyQt5.QtCore import QUrl
-        from PyQt5.QtGui import QIcon
     except ImportError:
         print("❌ PyQt5 not installed. Run: pip install PyQt5 PyQtWebEngine")
         sys.exit(1)
 
     # Must set before QApplication
+    #
+    # Added dark UI flags for Windows 11 overlay scrollbars / widgets:
+    # - forces Chromium UI (scrollbars, form controls) into dark mode
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        "--use-fake-ui-for-media-stream "          # auto-grant mic/camera — NO popup
+        "--use-fake-ui-for-media-stream "                 # auto-grant mic/camera — NO popup
         "--disable-features=WebRtcHideLocalIpsWithMdns "
-        "--allow-running-insecure-content"
+        "--allow-running-insecure-content "
+        "--force-dark-mode "
+        "--enable-features=WebUIDarkMode "
+        "--blink-settings=preferredColorScheme=0 "         # 0=dark, 1=light
     )
 
     app = QApplication(sys.argv)
     app.setApplicationName("LongLong AI Agent")
+
     window = QMainWindow()
     window.setWindowTitle("龙龙 · LongLong — Open Claw Hackathon 2026")
     window.setMinimumSize(900, 650)
@@ -154,9 +167,10 @@ if __name__ == "__main__":
 
     # Generate credentials
     URL, KEY, SECRET, token = generate_token()
-    print(f"✅ Token ready")
+    print("✅ Token ready")
 
     # Start the LiveKit agent in background
+    # NOTE: if you previously had watcher/IPC issues on Windows, you can remove "dev".
     base = os.path.dirname(os.path.abspath(__file__))
     agent_proc = subprocess.Popen(
         [sys.executable, os.path.join(base, "agent.py"), "dev"],

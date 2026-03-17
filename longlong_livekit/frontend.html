@@ -1,38 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>LongLong AI Agent</title>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=Cinzel:wght@400;500;600&display=swap');
+
+  :root{
+    --bg0: #07060a;
+    --bg1: #0b0712;
+
+    --lobster: #ff4d6d;
+    --lobster2: #ff2e55;
+    --coral: #ff7a59;
+    --gold: #ffcf5a;
+
+    --panel: rgba(255,255,255,0.04);
+    --panelBorder: rgba(255,255,255,0.08);
+
+    --text: #f4f0f6;
+    --textDim: rgba(246,215,184,0.28);
+
+    --shadow: 0 0 80px rgba(255,77,109,0.20), 0 0 160px rgba(255,122,89,0.10);
+
+    /* Scrollbar colors (match theme) */
+    --sbTrack: rgba(255,255,255,0.04);
+    --sbThumb: rgba(255,77,109,0.28);
+    --sbThumbHover: rgba(255,207,90,0.40);
+  }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  /* IMPORTANT: stop body/page scrolling so you don't see a page scrollbar */
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(1200px 700px at 50% 35%, #140a1f 0%, var(--bg0) 60%, #030206 100%);
+  }
+
   body {
-    background: #060608;
-    color: #e0e0e0;
+    color: var(--text);
     font-family: 'Inter', 'Segoe UI', sans-serif;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    height: 100vh;
-    overflow: hidden;
-    gap: 0;
   }
 
-  /* ── Background glow ── */
-  .bg-glow {
+  /* If any scrolling still happens (WebEngine quirks), style global scrollbars too */
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track {
+    background: var(--sbTrack);
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--sbThumb), rgba(255,122,89,0.18));
+    border-radius: 999px;
+    border: 2px solid rgba(0,0,0,0.35);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, var(--sbThumbHover), rgba(255,77,109,0.35));
+  }
+
+  /* ── Animated watery background ── */
+  .bg {
     position: fixed;
     inset: 0;
-    background:
-      radial-gradient(ellipse 60% 40% at 50% 60%, #0d2a5a22 0%, transparent 70%),
-      radial-gradient(ellipse 40% 30% at 50% 50%, #1a4faa11 0%, transparent 60%);
-    pointer-events: none;
     z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 55% 35% at 50% 55%, rgba(255,77,109,0.10) 0%, transparent 70%),
+      radial-gradient(ellipse 45% 30% at 40% 40%, rgba(255,122,89,0.08) 0%, transparent 65%),
+      radial-gradient(ellipse 70% 55% at 55% 30%, rgba(85,170,255,0.05) 0%, transparent 70%),
+      linear-gradient(180deg, var(--bg1), var(--bg0));
+  }
+
+  .bubbles {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.45;
+    filter: blur(0.2px);
+  }
+  .bubble {
+    position: absolute;
+    bottom: -120px;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(233,244,255,0.10);
+    border: 1px solid rgba(233,244,255,0.08);
+    animation: rise linear infinite;
+  }
+  @keyframes rise {
+    from { transform: translateY(0) translateX(0) scale(0.85); opacity: 0.0; }
+    10%  { opacity: 0.45; }
+    70%  { opacity: 0.35; }
+    to   { transform: translateY(-120vh) translateX(40px) scale(1.35); opacity: 0.0; }
   }
 
   .content {
@@ -48,28 +116,62 @@
   }
 
   /* ── Header ── */
-  .header { text-align: center; }
+  .header { text-align: center; position: relative; }
+
   h1 {
-    font-size: clamp(2.2rem, 5vw, 4.5rem);
-    font-weight: 200;
-    letter-spacing: 0.35em;
-    color: #fff;
-    line-height: 1;
-  }
-  .subtitle {
-    font-size: clamp(0.7rem, 1.2vw, 0.95rem);
-    color: #333;
-    letter-spacing: 0.18em;
-    margin-top: 10px;
-    font-weight: 300;
+    font-family: 'Cinzel', serif;
+    font-size: clamp(2.35rem, 5.1vw, 4.55rem);
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    line-height: 1.02;
+    text-transform: uppercase;
+
+    background: linear-gradient(90deg, rgba(255,122,89,0.95), rgba(255,207,90,0.92), rgba(255,77,109,0.95));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+
+    text-shadow:
+      0 0 22px rgba(255,77,109,0.10),
+      0 0 55px rgba(255,122,89,0.08);
   }
 
-  /* ── Orb ── */
+  /* NEW: neon “sign tube” under the title */
+  .neon-tube {
+    width: min(640px, 78vw);
+    height: 2px;
+    margin: 14px auto 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg,
+      rgba(255,77,109,0.0),
+      rgba(255,77,109,0.55),
+      rgba(255,207,90,0.65),
+      rgba(255,122,89,0.55),
+      rgba(255,77,109,0.0)
+    );
+    box-shadow:
+      0 0 10px rgba(255,77,109,0.25),
+      0 0 28px rgba(255,122,89,0.12),
+      0 0 50px rgba(255,207,90,0.08);
+    opacity: 0.9;
+  }
+
+  .subtitle {
+    font-family: 'Inter', sans-serif;
+    font-size: clamp(0.72rem, 1.18vw, 0.98rem);
+    color: var(--textDim);
+    letter-spacing: 0.18em;
+    margin-top: 10px;
+    font-weight: 400;
+    text-transform: uppercase;
+  }
+
+  /* ── Lobster Orb ── */
   .orb-section {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 28px;
+    gap: 22px;
     flex: 1;
     justify-content: center;
   }
@@ -80,66 +182,81 @@
     align-items: center;
     justify-content: center;
   }
-  .orb-ring::before {
+
+  .orb-ring::before,
+  .orb-ring::after{
     content: '';
     position: absolute;
-    width: calc(100% + 30px);
-    height: calc(100% + 30px);
-    border-radius: 50%;
-    border: 1px solid #1a4faa22;
-    animation: ring-pulse 3s ease-in-out infinite;
+    border-radius: 999px;
+    border: 1px solid rgba(255,77,109,0.18);
+    box-shadow: 0 0 20px rgba(255,77,109,0.07);
   }
-  .orb-ring::after {
-    content: '';
-    position: absolute;
-    width: calc(100% + 60px);
-    height: calc(100% + 60px);
-    border-radius: 50%;
-    border: 1px solid #1a4faa11;
-    animation: ring-pulse 3s ease-in-out infinite 0.5s;
+  .orb-ring::before{
+    width: calc(100% + 34px);
+    height: calc(100% + 34px);
+    animation: ringPulse 3.2s ease-in-out infinite;
   }
-  @keyframes ring-pulse {
-    0%,100% { opacity: 0.5; transform: scale(1); }
-    50%      { opacity: 1;   transform: scale(1.02); }
+  .orb-ring::after{
+    width: calc(100% + 70px);
+    height: calc(100% + 70px);
+    border-color: rgba(255,122,89,0.12);
+    animation: ringPulse 3.2s ease-in-out infinite 0.45s;
+  }
+
+  @keyframes ringPulse{
+    0%,100% { opacity: 0.55; transform: scale(1); }
+    50%     { opacity: 1; transform: scale(1.025); }
   }
 
   .orb {
-    width: clamp(160px, 20vw, 260px);
-    height: clamp(160px, 20vw, 260px);
+    width: clamp(170px, 22vw, 280px);
+    height: clamp(170px, 22vw, 280px);
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #2176e8, #0d3580 50%, #060e2a);
-    box-shadow:
-      0 0 60px #1a4faa33,
-      0 0 120px #1a4faa11,
-      inset 0 1px 1px #4499ff22;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: clamp(2.5rem, 5vw, 4rem);
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255,207,90,0.55) 0%, rgba(255,77,109,0.24) 26%, rgba(255,46,85,0.18) 44%, rgba(15,28,42,0.85) 72%, rgba(7,6,10,1) 100%);
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(255,255,255,0.06);
+    display: grid;
+    place-items: center;
+    transition: transform 0.25s, box-shadow 0.25s;
     user-select: none;
-    transition: transform 0.3s, box-shadow 0.3s;
     cursor: default;
+    position: relative;
+    overflow: hidden;
   }
-  .orb.listening {
-    animation: orb-pulse 2s ease-in-out infinite;
+
+  .lobster {
+    font-size: clamp(3.4rem, 6vw, 5.1rem);
+    transform: translateY(-2px);
+    filter: drop-shadow(0 10px 22px rgba(0,0,0,0.35));
   }
-  .orb.speaking {
-    animation: orb-speak 0.5s ease-in-out infinite alternate;
-    box-shadow: 0 0 80px #44aaff66, 0 0 160px #1a6fdd33;
+
+  .orb::before{
+    content:'';
+    position:absolute;
+    width: 55%;
+    height: 55%;
+    border-radius: 999px;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), transparent 60%);
+    top: 10%;
+    left: 10%;
+    transform: rotate(-20deg);
   }
-  .orb.thinking {
-    animation: orb-think 1.5s ease-in-out infinite;
+
+  .orb.listening { animation: orbListen 2.0s ease-in-out infinite; }
+  .orb.speaking  { animation: orbSpeak 0.55s ease-in-out infinite alternate; }
+  .orb.thinking  { animation: orbThink 1.4s ease-in-out infinite; }
+
+  @keyframes orbListen {
+    0%,100% { transform: scale(1); }
+    50%     { transform: scale(1.045); }
   }
-  @keyframes orb-pulse {
-    0%,100% { transform: scale(1);    box-shadow: 0 0 60px #1a4faa33, 0 0 120px #1a4faa11; }
-    50%      { transform: scale(1.04); box-shadow: 0 0 80px #1a6fdd55, 0 0 160px #1a4faa22; }
+  @keyframes orbSpeak {
+    from { transform: scale(1.02); box-shadow: 0 0 90px rgba(255,77,109,0.28), 0 0 180px rgba(255,122,89,0.14); }
+    to   { transform: scale(1.08); box-shadow: 0 0 125px rgba(255,77,109,0.40), 0 0 240px rgba(255,122,89,0.20); }
   }
-  @keyframes orb-speak {
-    from { transform: scale(1.02); box-shadow: 0 0 70px #44aaff55, 0 0 140px #1a6fdd22; }
-    to   { transform: scale(1.07); box-shadow: 0 0 100px #44aaff88, 0 0 200px #1a6fdd44; }
-  }
-  @keyframes orb-think {
-    0%,100% { opacity: 0.7; }
+  @keyframes orbThink {
+    0%,100% { opacity: 0.75; }
     50%     { opacity: 1; }
   }
 
@@ -150,36 +267,38 @@
     align-items: flex-end;
     height: clamp(32px, 4vh, 50px);
     opacity: 0;
-    transition: opacity 0.4s;
+    transition: opacity 0.35s;
   }
   .bars.active { opacity: 1; }
+
   .bar {
     width: clamp(4px, 0.5vw, 7px);
-    background: #1a8fff;
-    border-radius: 4px;
-    animation: bar-bounce 0.8s ease-in-out infinite alternate;
+    background: linear-gradient(180deg, rgba(255,207,90,0.85), rgba(255,77,109,0.85));
+    border-radius: 999px;
+    animation: barBounce 0.8s ease-in-out infinite alternate;
+    box-shadow: 0 0 10px rgba(255,77,109,0.12);
   }
   .bar:nth-child(1){animation-delay:0s;   height:30%}
   .bar:nth-child(2){animation-delay:0.1s; height:60%}
   .bar:nth-child(3){animation-delay:0.2s; height:100%}
   .bar:nth-child(4){animation-delay:0.15s;height:75%}
   .bar:nth-child(5){animation-delay:0.05s;height:45%}
-  @keyframes bar-bounce {
-    from { transform: scaleY(0.25); opacity: 0.4; }
+  @keyframes barBounce {
+    from { transform: scaleY(0.22); opacity: 0.45; }
     to   { transform: scaleY(1);    opacity: 1; }
   }
 
   /* ── Status ── */
   #status {
-    font-size: clamp(0.8rem, 1.3vw, 1rem);
-    color: #444;
+    font-size: clamp(0.82rem, 1.25vw, 1rem);
+    color: rgba(246,215,184,0.32);
     letter-spacing: 0.08em;
     font-weight: 300;
     min-height: 1.4em;
     text-align: center;
-    transition: color 0.3s;
+    transition: color 0.25s;
   }
-  #status.active { color: #7ab8ff; }
+  #status.active { color: rgba(255,207,90,0.70); }
 
   /* ── Mic meter ── */
   #mic-wrap {
@@ -189,116 +308,146 @@
   }
   #mic-label {
     font-size: 0.65rem;
-    color: #222;
+    color: rgba(233,244,255,0.20);
     letter-spacing: 0.15em;
-    font-weight: 400;
+    font-weight: 500;
   }
   #mic-level {
     width: clamp(80px, 10vw, 160px);
-    height: 3px;
-    background: #111;
-    border-radius: 2px;
+    height: 4px;
+    background: rgba(233,244,255,0.08);
+    border-radius: 999px;
     overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
   }
   #mic-bar {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, #1a5fcc, #4aa8ff);
-    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(255,77,109,0.85), rgba(255,207,90,0.85));
+    border-radius: 999px;
     transition: width 0.04s;
   }
 
   /* ── Bottom section ── */
   .bottom {
     width: 100%;
-    max-width: 900px;
+    max-width: 950px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
   }
 
   /* ── Transcript ── */
   #transcript {
     width: 100%;
-    background: rgba(255,255,255,0.02);
-    border: 1px solid #ffffff08;
+    background: var(--panel);
+    border: 1px solid var(--panelBorder);
     border-radius: 16px;
-    padding: clamp(14px, 2vh, 24px) clamp(16px, 2vw, 28px);
-    font-size: clamp(0.82rem, 1.1vw, 1rem);
+    padding: clamp(14px, 2vh, 22px) clamp(16px, 2vw, 26px);
+    font-size: clamp(0.84rem, 1.1vw, 1rem);
     line-height: 1.7;
-    color: #555;
+    color: rgba(233,244,255,0.72);
     min-height: clamp(70px, 12vh, 130px);
-    max-height: clamp(120px, 20vh, 200px);
+    max-height: clamp(120px, 20vh, 220px);
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: #1a1a1a transparent;
+    scrollbar-color: rgba(255,77,109,0.28) rgba(255,255,255,0.03);
+    backdrop-filter: blur(10px);
   }
-  #transcript::-webkit-scrollbar { width: 4px; }
-  #transcript::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px; }
+  #transcript::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(255,77,109,0.28), rgba(255,122,89,0.18)); }
 
-  .msg-user  { color: #ccc; margin: 3px 0; }
-  .msg-agent { color: #4aa8ff; margin: 3px 0; }
-  .msg-label { font-size: 0.72rem; opacity: 0.4; margin-right: 8px; font-weight: 500; letter-spacing: 0.05em; }
+  .msg-user  { color: rgba(233,244,255,0.80); margin: 3px 0; }
+  .msg-agent { color: rgba(255,207,90,0.92); margin: 3px 0; }
+  .msg-label {
+    font-size: 0.72rem;
+    opacity: 0.5;
+    margin-right: 8px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+  }
 
   /* ── Debug ── */
   #debug {
     width: 100%;
     background: transparent;
-    font-size: 0.68rem;
-    color: #1e1e1e;
-    font-family: 'Courier New', monospace;
+    font-size: 0.70rem;
+    color: rgba(246,215,184,0.18);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     max-height: clamp(40px, 6vh, 70px);
     overflow-y: auto;
     scrollbar-width: none;
     text-align: center;
+    letter-spacing: 0.02em;
   }
 </style>
 </head>
+
 <body>
+  <div class="bg"></div>
+  <div class="bubbles" id="bubbles"></div>
 
-<div class="bg-glow"></div>
+  <div class="content">
+    <div class="header">
+      <h1>LONG LONG</h1>
+      <div class="neon-tube"></div>
+      <p class="subtitle">OPEN CLAW HACKATHON 2026</p>
+    </div>
 
-<div class="content">
+    <div class="orb-section">
+      <div class="orb-ring">
+        <div class="orb listening" id="orb">
+          <div class="lobster" id="orbIcon">🦞</div>
+        </div>
+      </div>
 
-  <!-- Header -->
-  <div class="header">
-    <h1>龙龙 &nbsp;·&nbsp; LONGLONG</h1>
-    <p class="subtitle">OPEN CLAW HACKATHON 2026 &nbsp;·&nbsp; VOICE AI AGENT</p>
+      <div class="bars active" id="bars">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div>
+      </div>
+
+      <div id="status" class="active">Initializing...</div>
+
+      <div id="mic-wrap">
+        <span id="mic-label">MIC</span>
+        <div id="mic-level"><div id="mic-bar"></div></div>
+      </div>
+    </div>
+
+    <div class="bottom">
+      <div id="transcript">
+        <div style="opacity:0.35;font-size:0.9rem;text-align:center">
+          Conversation will appear here...
+        </div>
+      </div>
+      <div id="debug">starting...</div>
+    </div>
   </div>
 
-  <!-- Orb section -->
-  <div class="orb-section">
-    <div class="orb-ring">
-      <div class="orb listening" id="orb">🎙️</div>
-    </div>
-
-    <div class="bars active" id="bars">
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-      <div class="bar"></div><div class="bar"></div>
-    </div>
-
-    <div id="status" class="active">Initializing...</div>
-
-    <div id="mic-wrap">
-      <span id="mic-label">MIC</span>
-      <div id="mic-level"><div id="mic-bar"></div></div>
-    </div>
-  </div>
-
-  <!-- Bottom -->
-  <div class="bottom">
-    <div id="transcript">
-      <div style="color:#1e1e1e;font-size:0.8rem;text-align:center">Conversation will appear here...</div>
-    </div>
-    <div id="debug">starting...</div>
-  </div>
-
-</div>
-
-<div id="audio-container" style="display:none"></div>
+  <div id="audio-container" style="display:none"></div>
 
 <script>
+(function spawnBubbles(){
+  const wrap = document.getElementById('bubbles');
+  const n = 22;
+  for (let i=0;i<n;i++){
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    const left = Math.random()*100;
+    const size = 6 + Math.random()*18;
+    const dur = 9 + Math.random()*12;
+    const delay = -Math.random()*dur;
+    b.style.left = left + 'vw';
+    b.style.width = size + 'px';
+    b.style.height = size + 'px';
+    b.style.animationDuration = dur + 's';
+    b.style.animationDelay = delay + 's';
+    b.style.opacity = (0.12 + Math.random()*0.25).toFixed(2);
+    wrap.appendChild(b);
+  }
+})();
+
+/* LiveKit logic (unchanged) */
 const WS_URL   = 'LIVEKIT_URL_PLACEHOLDER';
 const ROOM     = 'longlong-room';
 const IDENTITY = 'user-' + Math.random().toString(36).slice(2,7);
@@ -310,6 +459,7 @@ const micBar     = document.getElementById('mic-bar');
 const audioC     = document.getElementById('audio-container');
 const debugEl    = document.getElementById('debug');
 const transcript = document.getElementById('transcript');
+const orbIcon    = document.getElementById('orbIcon');
 
 let room = null, micAnimFrame = null;
 
@@ -323,8 +473,16 @@ function setStatus(msg, state) {
   statusEl.textContent = msg;
   statusEl.className = ['listening','speaking','thinking'].includes(state) ? 'active' : '';
   orb.className = 'orb ' + (state || 'idle');
-  const icons = { listening:'🎙️', speaking:'🔊', thinking:'⌛', idle:'◉', connecting:'◌' };
-  orb.textContent = icons[state] || '◉';
+
+  const icons = {
+    listening: '🦞',
+    speaking:  '🦞',
+    thinking:  '🫧',
+    idle:      '🦞',
+    connecting:'🫧'
+  };
+  orbIcon.textContent = icons[state] || '🦞';
+
   bars.className = 'bars' + (['listening','speaking'].includes(state) ? ' active' : '');
 }
 
