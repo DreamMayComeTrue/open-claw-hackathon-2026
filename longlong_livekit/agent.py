@@ -1,7 +1,7 @@
 """
 龙龙 — LiveKit Voice Agent
 Phone-call quality conversation: full-duplex, interruptible, ~300ms response
-Stack: Deepgram STT → Groq LLM → Edge TTS (via custom plugin)
+Stack: Deepgram STT (multilingual) → Anthropic Claude Sonnet LLM → Deepgram TTS · WebRTC via LiveKit
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from livekit.agents import (
     function_tool,
     RunContext,
 )
-from livekit.plugins import deepgram, silero, cartesia, anthropic as lk_anthropic
+from livekit.plugins import deepgram, silero, anthropic as lk_anthropic
 from livekit.plugins import noise_cancellation
 
 load_dotenv()
@@ -28,8 +28,8 @@ logger = logging.getLogger("longlong")
 # ── System prompt ──────────────────────────────────────────────────────────────
 
 INSTRUCTIONS = """
-You are LongLong, a smart and friendly AI voice assistant.
-Built for Open Claw Hackathon 2026.
+You are LongLong (龙龙), a smart and capable AI voice assistant built for Open Claw Hackathon 2026.
+You are bilingual — respond in whichever language the user speaks (Chinese or English).
 
 PERSONALITY:
 - Warm, confident, a little playful — like a helpful friend on a phone call.
@@ -37,14 +37,24 @@ PERSONALITY:
 - No markdown, no bullet points, no lists. Speak naturally.
 - When you complete a task, confirm it briefly and naturally.
 - If unsure, ask one short clarifying question.
+- When the user speaks Chinese, reply in Chinese. When they speak English, reply in English.
+
+TOOL USE STRATEGY:
+- Always use the most specific tool available for a task. Do not guess — use tools to get real data.
+- Chain tools when needed: e.g. take a screenshot THEN describe it to answer questions about the screen.
+- Before closing an app, you may list running apps first to confirm it is actually running.
+- Prefer shell commands for information queries (dir, ipconfig, systeminfo) over guessing.
+- When asked to write or edit a file, always use write_file. Never fabricate file content.
 
 CAPABILITIES:
 - Open/close apps and websites
-- Control mouse and keyboard
-- Take screenshots and describe screen
+- Control mouse (click) and keyboard (type, shortcuts)
+- Take screenshots and describe screen content using vision AI
 - Check weather and time
-- Read files
+- Read and write files
 - Control system volume
+- List running processes
+- Run safe shell commands
 """
 
 # ── Tools ──────────────────────────────────────────────────────────────────────
@@ -52,7 +62,7 @@ CAPABILITIES:
 @function_tool
 async def get_weather(context: RunContext, city: str) -> str:
     """Get current weather for a city."""
-    import urllib.request, json
+    import urllib.request, urllib.parse, json
     try:
         url = f"https://wttr.in/{urllib.parse.quote(city)}?format=j1"
         with urllib.request.urlopen(url, timeout=5) as r:
@@ -254,6 +264,93 @@ async def read_file(context: RunContext, path: str) -> str:
         return f"Could not read file: {e}"
 
 
+@function_tool
+async def write_file(context: RunContext, path: str, content: str, mode: str = "write") -> str:
+    """Write or append text to a file. mode='write' overwrites, mode='append' adds to end."""
+    import os
+    try:
+        file_mode = "a" if mode == "append" else "w"
+        full_path = os.path.expanduser(path)
+        parent_dir = os.path.dirname(full_path) or "."
+        os.makedirs(parent_dir, exist_ok=True)
+        with open(full_path, file_mode, encoding="utf-8") as f:
+            f.write(content)
+        action = "Appended to" if mode == "append" else "Wrote to"
+        return f"{action} {path}"
+    except Exception as e:
+        return f"Could not write file: {e}"
+
+
+@function_tool
+async def mouse_click(context: RunContext, x: int, y: int, button: str = "left", double: bool = False) -> str:
+    """Click the mouse at screen coordinates (x, y). button='left'/'right'/'middle', double=True for double-click."""
+    import pyautogui
+    try:
+        if double:
+            pyautogui.doubleClick(x, y, button=button)
+            return f"Double-clicked at ({x}, {y})"
+        else:
+            pyautogui.click(x, y, button=button)
+            return f"Clicked at ({x}, {y})"
+    except Exception as e:
+        return f"Could not click: {e}"
+
+
+@function_tool
+async def list_running_apps(context: RunContext) -> str:
+    """List currently running applications (process names and window titles)."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=5
+        )
+        lines = result.stdout.strip().splitlines()
+        # Parse CSV: "Name","PID","Session Name","Session#","Mem Usage"
+        seen, apps = set(), []
+        MAX_APPS_TO_REPORT = 20
+        for line in lines:
+            parts = [p.strip('"') for p in line.split('","')]
+            if parts:
+                name = parts[0].lower().replace(".exe", "")
+                if name not in seen and name not in {"system", "registry", "smss", "csrss",
+                                                      "wininit", "services", "lsass", "svchost",
+                                                      "dwm", "conhost", "tasklist"}:
+                    seen.add(name)
+                    apps.append(parts[0].replace(".exe", ""))
+        if apps:
+            return "Running: " + ", ".join(apps[:MAX_APPS_TO_REPORT])
+        return "No user applications found"
+    except Exception as e:
+        return f"Could not list apps: {e}"
+
+
+@function_tool
+async def run_shell_command(context: RunContext, command: str) -> str:
+    """Run a safe, read-only Windows shell command and return output. Good for: dir, echo, ipconfig, systeminfo, whoami, date, time, ver."""
+    import subprocess
+    # Safelist of allowed command prefixes — prevents destructive operations
+    SAFE_PREFIXES = (
+        "dir", "echo", "ipconfig", "whoami", "hostname", "ver", "date /t",
+        "time /t", "systeminfo", "type", "where", "set", "path", "wmic",
+        "netstat", "ping", "tracert", "nslookup", "vol", "cd", "tree",
+    )
+    MAX_COMMAND_OUTPUT_CHARS = 600
+    cmd_lower = command.strip().lower()
+    if not any(cmd_lower.startswith(p) for p in SAFE_PREFIXES):
+        return f"Command not allowed for safety: '{command}'. Allowed: {', '.join(SAFE_PREFIXES)}"
+    try:
+        result = subprocess.run(
+            command, shell=True, capture_output=True, text=True, timeout=8
+        )
+        output = (result.stdout or result.stderr or "").strip()
+        return output[:MAX_COMMAND_OUTPUT_CHARS] + ("..." if len(output) > MAX_COMMAND_OUTPUT_CHARS else "") if output else "No output"
+    except subprocess.TimeoutExpired:
+        return "Command timed out"
+    except Exception as e:
+        return f"Command failed: {e}"
+
+
 # ── Agent ──────────────────────────────────────────────────────────────────────
 
 class LongLong(Agent):
@@ -273,6 +370,10 @@ class LongLong(Agent):
                 keyboard_shortcut,
                 set_volume,
                 read_file,
+                write_file,
+                mouse_click,
+                list_running_apps,
+                run_shell_command,
             ],
         )
 
@@ -293,12 +394,12 @@ async def entrypoint(ctx: JobContext):
         vad=silero.VAD.load(),
         stt=deepgram.STT(
             model="nova-2",
-            language="en",
             punctuate=True,
             smart_format=True,
+            # No language= restriction → Deepgram auto-detects Chinese & English
         ),
         llm=lk_anthropic.LLM(
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-5-20251001",  # upgraded from haiku for smarter reasoning
             api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         ),
         # TTS — Deepgram aura-2, confirmed working on free tier
@@ -309,7 +410,7 @@ async def entrypoint(ctx: JobContext):
         # Interrupt handling — user can cut 龙龙 off mid-sentence
         allow_interruptions=True,
         min_interruption_duration=0.3,
-        min_endpointing_delay=0.4,      # how long silence before turn ends
+        min_endpointing_delay=0.3,      # reduced: snappier turn detection
     )
 
     await session.start(

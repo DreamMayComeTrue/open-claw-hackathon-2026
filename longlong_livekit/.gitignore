@@ -1,0 +1,10 @@
+# Generated files — contain injected credentials, do not commit
+_longlong_ui.html
+
+# TTS diagnostic output
+test_tts_output.mp3
+
+# Python
+__pycache__/
+*.py[cod]
+.env
