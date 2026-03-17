@@ -2,7 +2,7 @@
 ### Phone-call quality voice AI · Open Claw Hackathon 2026
 
 Full-duplex voice conversation — interrupt 龙龙 mid-sentence, ~300ms response time.
-Stack: Deepgram STT → Groq LLaMA-3.3-70b → ElevenLabs TTS · WebRTC via LiveKit
+Stack: Deepgram STT (multilingual) → Anthropic Claude Sonnet → Deepgram TTS · WebRTC via LiveKit
 
 ## Setup (5 minutes)
 
@@ -47,6 +47,22 @@ lk token create --room test --identity user
 - 帮我按 Ctrl+C / Press Ctrl+C
 - 调低音量到 30 / Set volume to 30
 - 帮我读这个文件 C:/notes.txt
+- 帮我写个文件 / Write a file for me
+- 点击屏幕坐标 500 300 / Click at 500, 300
+- 现在有什么程序在运行？/ What apps are running?
+- 我的 IP 地址是什么？/ What's my IP address?
+
+## Intelligence upgrades
+| Feature | Before | After |
+|---------|--------|-------|
+| LLM | Claude Haiku | Claude Sonnet (smarter, better reasoning) |
+| Language | English only | Bilingual — Chinese 🇨🇳 + English 🇺🇸 auto-detect |
+| File ops | Read only | Read + Write (create, overwrite, append) |
+| Mouse | ❌ | ✅ Click at any screen coordinates |
+| Process list | ❌ | ✅ List running apps before acting |
+| Shell cmds | ❌ | ✅ Safe read-only commands (dir, ipconfig, etc.) |
+| Turn speed | 400ms delay | 300ms delay (snappier) |
+| Tool strategy | Reactive | Guided — chains tools intelligently |
 
 ## Why LiveKit is better than the old approach
 | Feature | Old approach | LiveKit |
