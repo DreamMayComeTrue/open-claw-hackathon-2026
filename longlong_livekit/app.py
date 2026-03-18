@@ -129,6 +129,7 @@ def run_desktop_app(html_content):
         "--blink-settings=preferredColorScheme=0 "         # 0=dark, 1=light
     )
 
+
     app = QApplication(sys.argv)
     app.setApplicationName("LongLong AI Agent")
 
@@ -158,7 +159,16 @@ def run_desktop_app(html_content):
     window.setCentralWidget(view)
     window.showMaximized()   # start maximized — fills the screen nicely
 
-    sys.exit(app.exec_())
+
+    try:
+        sys.exit(app.exec_())
+    except KeyboardInterrupt:
+        # Clean exit if you press Ctrl+C in terminal
+        try:
+            window.close()
+        except Exception:
+            pass
+        return
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

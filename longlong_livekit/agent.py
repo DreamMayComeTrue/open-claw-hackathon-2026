@@ -12,6 +12,7 @@ Key upgrades for hackathon demo:
 import os
 import json
 import time
+import asyncio
 import logging
 from typing import Any, Dict, Optional
 
@@ -39,14 +40,19 @@ logger = logging.getLogger("longlong")
 
 INSTRUCTIONS = """
 You are LongLong, a smart and friendly AI voice assistant.
-
+You are bridged to Nicole (your OpenClaw AI agent) via Telegram.
 
 THIS IS A LIVE VOICE DEMO ON WINDOWS.
 - You may control the user's computer (open apps, type, click, etc.) without asking permission.
 - Think step-by-step silently. Speak only the final result in a short, natural voice reply.
-- Keep spoken replies SHORT: usually 1–3 sentences. No markdown, no bullet points, no lists.
+- Keep spoken replies SHORT: usually 1–5 sentences. No markdown, no bullet points, no lists.
 - If a request is ambiguous, ask ONE short clarifying question.
 - For multi-step tasks, do them step-by-step and verify progress with screenshots when needed.
+- You can tell some joke if the user requires
+
+NICOLE ROUTING:
+- "ask Nicole / tell Nicole / Nicole search / Nicole remember / what does Nicole know" → ask_nicole
+- "send Nicole a message / message Nicole" → send_telegram
 
 GOAL:
 - Be impressive in a live demo: fast, confident, and reliable.
@@ -69,7 +75,7 @@ def _json_dumps(obj: Any) -> str:
 async def get_weather(context: RunContext, city: str) -> str:
     """Get current weather for a city (quick, no API key)."""
     import urllib.request
-    import urllib.parse  # FIX: needed for quote()
+    import urllib.parse
     import json as _json
 
     try:
@@ -221,7 +227,7 @@ async def screenshot_and_describe(context: RunContext, question: str = "What is 
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
     resp = client.messages.create(
-        model=os.getenv("ANTHROPIC_VISION_MODEL", "claude-haiku-4-5-20251001"),
+        model=os.getenv("ANTHROPIC_VISION_MODEL", "claude-haiku-4-5"),
         max_tokens=220,
         messages=[{
             "role": "user",
@@ -317,6 +323,92 @@ async def mouse_scroll(context: RunContext, amount: int) -> str:
     return "Scrolled."
 
 
+# ── Nicole (OpenClaw) Gateway Bridge ──────────────────────────────────────────
+
+@function_tool
+async def ask_nicole(context: RunContext, command: str) -> str:
+    """
+    Send a command directly to Nicole (OpenClaw) via local gateway and get her reply.
+    Use when user says: 'ask Nicole to...', 'tell Nicole to...', 'Nicole search...',
+    'Nicole remember...', 'what does Nicole know about...', etc.
+    """
+    import requests, re as _re
+    token = os.getenv("OPENCLAW_GATEWAY_TOKEN", "")
+    url   = os.getenv("OPENCLAW_GATEWAY_URL", "http://127.0.0.1:18789")
+
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        resp = requests.post(
+            f"{url}/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "openclaw:main",
+                "messages": [{"role": "user", "content": command}],
+                "stream": False,
+            },
+            timeout=30,
+        )
+        logger.info(f"Nicole status={resp.status_code} body={resp.text[:300]}")
+
+        if resp.ok:
+            data = resp.json()
+            try:
+                reply = data["choices"][0]["message"]["content"].strip()
+            except (KeyError, IndexError):
+                reply = str(data)[:400]
+            # Strip markdown symbols for clean voice output
+            reply = _re.sub(r'\*+', '', reply)
+            reply = _re.sub(r'#+\s*', '', reply)
+            reply = _re.sub(r':[a-z_]+:', '', reply)
+            reply = _re.sub(r'\n+', ' ', reply).strip()
+            return f"Nicole says: {reply[:400]}"
+
+        return f"Nicole gateway error {resp.status_code}: {resp.text[:200]}"
+    except requests.exceptions.ConnectionError:
+        return "Nicole gateway is not reachable — is OpenClaw running?"
+    except requests.exceptions.Timeout:
+        return "Nicole took too long — she might be busy"
+    except Exception as e:
+        return f"Could not reach Nicole: {e}"
+
+
+@function_tool
+async def send_telegram(context: RunContext, message: str) -> str:
+    """
+    Ask Nicole to send a Telegram message on your behalf.
+    Use when user says 'send a Telegram to X saying Y' or 'message X on Telegram'.
+    """
+    import requests
+    token = os.getenv("OPENCLAW_GATEWAY_TOKEN", "")
+    url   = os.getenv("OPENCLAW_GATEWAY_URL", "http://127.0.0.1:18789")
+
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        resp = requests.post(
+            f"{url}/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "openclaw:main",
+                "messages": [{"role": "user", "content": message}],
+                "stream": False,
+            },
+            timeout=30,
+        )
+        if resp.ok:
+            data = resp.json()
+            reply = data["choices"][0]["message"]["content"].strip()
+            return f"Nicole: {reply[:200]}"
+        return f"Gateway error {resp.status_code}: {resp.text[:100]}"
+    except Exception as e:
+        return f"Could not reach Nicole: {e}"
+
+
 # ── Agent ─────────────────────────────────────────────────────────────────────
 
 class LongLong(Agent):
@@ -352,6 +444,9 @@ class LongLong(Agent):
                 mouse_move,
                 mouse_click,
                 mouse_scroll,
+                # Nicole (OpenClaw) bridge via Telegram
+                ask_nicole,
+                send_telegram,
             ],
         )
 
@@ -370,7 +465,7 @@ class LongLong(Agent):
             instructions=(
                 "Greet the user. Speak naturally with no emojis and no markdown. "
             "Do not use symbols like asterisks, hashtags, or brackets. "
-            "Say: 'Hey, LongLong here. What can I do for you?'"
+            "Hey, LongLong here. What can I do for you?"
             )
         )
 
@@ -567,7 +662,7 @@ async def entrypoint(ctx: JobContext):
             smart_format=True,
         ),
         llm=lk_anthropic.LLM(
-            model=os.getenv("ANTHROPIC_CHAT_MODEL", "claude-haiku-4-5-20251001"),
+            model=os.getenv("ANTHROPIC_CHAT_MODEL", "claude-haiku-4-5"),
             api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         ),
         tts=deepgram.TTS(
@@ -583,7 +678,7 @@ async def entrypoint(ctx: JobContext):
     # (Because remember/recall/do_task are defined after LongLong init.)
     # LiveKit Agent base class stores tools at init; we can patch for simplicity.
     try:
-        agent.tools.extend([remember, recall, show_memory, do_task])
+        agent.tools.extend([remember, recall, show_memory, do_task, ask_nicole, send_telegram])
     except Exception:
         pass
 
@@ -594,6 +689,9 @@ async def entrypoint(ctx: JobContext):
             noise_cancellation=noise_cancellation.BVC(),
         ),
     )
+
+    # Keep session alive
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
